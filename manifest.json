@@ -1,0 +1,13 @@
+{
+  "display_name": "多候选帮答",
+  "loading_order": 12,
+  "requires": [],
+  "optional": [],
+  "dependencies": [],
+  "js": "index.js",
+  "css": "style.css",
+  "author": "OpenAI Codex",
+  "version": "1.0.0",
+  "auto_update": false,
+  "minimum_client_version": "1.13.3"
+}
