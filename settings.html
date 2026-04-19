@@ -1,12 +1,13 @@
 <div class="stmr-settings">
     <div class="inline-drawer">
         <div class="inline-drawer-toggle inline-drawer-header">
-            <b>多候选帮答</b>
+            <b>多候选回复</b>
             <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
         </div>
         <div class="inline-drawer-content">
             <p class="stmr-help">
-                一次生成多条不同风格的“下一句该怎么回”，再挑一条插入输入框。候选数量越多，请求次数越多，模型消耗也会同步增加。
+                这个扩展会在聊天输入区旁边加一个按钮。点击后会打开一个上方写草稿、下方看候选的工作台；
+                生成时会尽量用你的第一人称口吻来写，不是站在助手视角解释。
             </p>
 
             <div class="stmr-settings-grid">
@@ -16,7 +17,7 @@
                 </label>
 
                 <label>
-                    <span>默认候选数量</span>
+                    <span>默认候选数</span>
                     <input id="stmr_settings_reply_count" class="text_pole" type="number" min="1" max="12" step="1" />
                 </label>
 
@@ -27,18 +28,18 @@
             </div>
 
             <label>
-                <span>文本长度要求</span>
+                <span>长度要求</span>
                 <input
                     id="stmr_settings_length_instruction"
                     class="text_pole"
                     type="text"
-                    placeholder="例如：每条 40-80 字，像真人聊天一样自然"
+                    placeholder="例如：每条 40-80 字，像我本人会发出的聊天消息。"
                 />
             </label>
 
             <label class="checkbox_label">
                 <input id="stmr_settings_use_input_draft" type="checkbox" />
-                <span>把输入框现有内容作为草稿/意图参考</span>
+                <span>将输入框当前内容作为草稿/意图参考</span>
             </label>
 
             <label>
@@ -47,7 +48,7 @@
                     id="stmr_settings_styles_text"
                     class="text_pole textarea_compact"
                     rows="8"
-                    placeholder="自然顺口&#10;温柔体贴&#10;俏皮可爱"
+                    placeholder="自然口吻&#10;温柔体贴&#10;俏皮可爱"
                 ></textarea>
             </label>
 
@@ -57,12 +58,12 @@
                     id="stmr_settings_extra_instructions"
                     class="text_pole textarea_compact"
                     rows="4"
-                    placeholder="例如：不要太油，不要使用网络流行语"
+                    placeholder="例如：别太油，保留我的语气，不要写成旁白。"
                 ></textarea>
             </label>
 
             <div class="stmr-settings-actions">
-                <button id="stmr_open_panel" class="menu_button">打开帮答面板</button>
+                <button id="stmr_open_panel" class="menu_button">打开工作台</button>
                 <button id="stmr_generate_from_settings" class="menu_button">立即生成候选</button>
             </div>
         </div>

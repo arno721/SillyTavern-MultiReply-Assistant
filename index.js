@@ -6,12 +6,13 @@ const TEMPLATE_ROOT = `third-party/${MODULE_NAME}`;
 const PANEL_OVERLAY_ID = "stmr-overlay";
 const PANEL_ID = "stmr-panel";
 const OPEN_BUTTON_ID = "stmr-open-panel-button";
+
 const DEFAULT_STYLE_LIST = [
-    "自然顺口",
+    "自然口吻",
     "温柔体贴",
     "俏皮可爱",
     "高情商圆润",
-    "直球主动",
+    "直接主动",
     "简短利落",
     "暧昧拉扯",
     "成熟稳重",
@@ -21,7 +22,7 @@ const DEFAULT_SETTINGS = {
     enabled: true,
     replyCount: 4,
     responseLength: 120,
-    lengthInstruction: "每条约 40-80 字，像真人聊天一样自然。",
+    lengthInstruction: "每条 40-80 字，像我本人会发出的聊天消息。",
     stylesText: DEFAULT_STYLE_LIST.join("\n"),
     extraInstructions: "",
     useInputDraft: true,
@@ -32,10 +33,13 @@ const state = {
     isGenerating: false,
     stopAfterCurrent: false,
     generationToken: 0,
+    draftSyncing: false,
     ui: {
         overlay: null,
         panel: null,
         note: null,
+        draftInput: null,
+        draftCount: null,
         resultsList: null,
         progressBar: null,
         progressLabel: null,
@@ -61,6 +65,7 @@ function getSettings() {
     if (typeof settings.enabled !== "boolean") {
         settings.enabled = DEFAULT_SETTINGS.enabled;
     }
+
     settings.replyCount = clampNumber(settings.replyCount, 1, 12, DEFAULT_SETTINGS.replyCount);
     settings.responseLength = clampNumber(settings.responseLength, 16, 1000, DEFAULT_SETTINGS.responseLength);
     settings.lengthInstruction = String(settings.lengthInstruction ?? DEFAULT_SETTINGS.lengthInstruction);
@@ -103,18 +108,58 @@ function buildStyleSequence(count, stylesText) {
     return output;
 }
 
-function getDraftText() {
-    return String(document.querySelector("#send_textarea")?.value ?? "").trim();
+function getChatInputTextarea() {
+    return document.querySelector("#send_textarea");
 }
 
-function writeToInput(text, mode = "replace") {
-    const textarea = document.querySelector("#send_textarea");
-    if (!textarea) {
-        toastr.warning("没有找到输入框。", "多候选帮答");
+function getComposerDraftText() {
+    if (state.ui.draftInput) {
+        return String(state.ui.draftInput.value ?? "");
+    }
+
+    return String(getChatInputTextarea()?.value ?? "");
+}
+
+function updateDraftCount(text) {
+    if (!state.ui.draftCount) {
         return;
     }
 
-    const normalized = String(text ?? "").trim();
+    const count = String(text ?? "").length;
+    state.ui.draftCount.textContent = `${count} 字`;
+}
+
+function syncComposerFromInput() {
+    const textarea = getChatInputTextarea();
+    const next = String(textarea?.value ?? "");
+
+    if (state.ui.draftInput) {
+        state.ui.draftInput.value = next;
+    }
+
+    updateDraftCount(next);
+}
+
+function syncInputFromComposer() {
+    if (!state.ui.draftInput) {
+        return;
+    }
+
+    state.draftSyncing = true;
+    writeToInput(state.ui.draftInput.value, "replace", { focus: false, trim: false });
+    state.draftSyncing = false;
+}
+
+function writeToInput(text, mode = "replace", options = {}) {
+    const { focus = true, trim = true } = options;
+    const textarea = getChatInputTextarea();
+
+    if (!textarea) {
+        toastr.warning("没有找到输入框。", "多候选回复");
+        return;
+    }
+
+    const normalized = trim ? String(text ?? "").trim() : String(text ?? "");
     if (!normalized) {
         return;
     }
@@ -127,7 +172,10 @@ function writeToInput(text, mode = "replace") {
     }
 
     textarea.dispatchEvent(new Event("input", { bubbles: true }));
-    textarea.focus();
+
+    if (focus) {
+        textarea.focus();
+    }
 }
 
 async function copyToClipboard(text) {
@@ -150,7 +198,7 @@ async function copyToClipboard(text) {
         helper.remove();
     }
 
-    toastr.success("已复制到剪贴板。", "多候选帮答");
+    toastr.success("已复制到剪贴板。", "多候选回复");
 }
 
 function createButton() {
@@ -158,7 +206,7 @@ function createButton() {
     button.id = OPEN_BUTTON_ID;
     button.type = "button";
     button.className = "stmr-trigger-button";
-    button.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i><span>多候选帮答</span>';
+    button.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i><span>多候选回复</span>';
     button.addEventListener("click", async () => {
         openPanel();
         await generateCandidates();
@@ -166,10 +214,37 @@ function createButton() {
     return button;
 }
 
+function ensureInputMirror() {
+    const textarea = getChatInputTextarea();
+
+    if (!textarea || textarea.dataset.stmrMirrorBound === "1") {
+        return;
+    }
+
+    textarea.dataset.stmrMirrorBound = "1";
+    textarea.addEventListener("input", () => {
+        if (state.draftSyncing) {
+            return;
+        }
+
+        if (!state.ui.overlay?.classList.contains("is-visible")) {
+            return;
+        }
+
+        if (!state.ui.draftInput || document.activeElement === state.ui.draftInput) {
+            return;
+        }
+
+        syncComposerFromInput();
+    });
+}
+
 function ensureChatButton() {
-    const textarea = document.querySelector("#send_textarea");
+    const textarea = getChatInputTextarea();
     const existingButton = document.getElementById(OPEN_BUTTON_ID);
     const settings = getSettings();
+
+    ensureInputMirror();
 
     if (!settings.enabled || !textarea) {
         existingButton?.closest(".stmr-button-row")?.remove();
@@ -188,8 +263,14 @@ function ensureChatButton() {
 
 function updateProgress(current, total) {
     const percent = total > 0 ? Math.round((current / total) * 100) : 0;
-    state.ui.progressBar.style.width = `${percent}%`;
-    state.ui.progressLabel.textContent = total > 0 ? `${current}/${total}` : "0/0";
+
+    if (state.ui.progressBar) {
+        state.ui.progressBar.style.width = `${percent}%`;
+    }
+
+    if (state.ui.progressLabel) {
+        state.ui.progressLabel.textContent = total > 0 ? `${current}/${total} · ${percent}%` : "0/0";
+    }
 }
 
 function setPanelNote(text) {
@@ -200,8 +281,15 @@ function setPanelNote(text) {
 
 function setGeneratingUi(isGenerating) {
     state.isGenerating = isGenerating;
-    state.ui.generateButton.disabled = isGenerating;
-    state.ui.stopButton.classList.toggle("stmr-stop-hidden", !isGenerating);
+
+    if (state.ui.generateButton) {
+        state.ui.generateButton.disabled = isGenerating;
+        state.ui.generateButton.textContent = isGenerating ? "生成中..." : "开始生成";
+    }
+
+    if (state.ui.stopButton) {
+        state.ui.stopButton.classList.toggle("stmr-stop-hidden", !isGenerating);
+    }
 }
 
 function syncPanelInputsFromSettings() {
@@ -249,20 +337,25 @@ function syncSettingsInputsFromState() {
     $("#stmr_settings_use_input_draft").prop("checked", settings.useInputDraft);
 }
 
-function clearResults(message = "点“开始生成”后，这里会出现多条不同风格的候选回复。") {
+function clearResults(message = "输入草稿后点击“开始生成”，这里会出现多条可直接选择的回复。") {
+    if (!state.ui.resultsList) {
+        return;
+    }
+
     state.ui.resultsList.replaceChildren();
 
     const empty = document.createElement("div");
     empty.className = "stmr-empty-state";
     empty.textContent = message;
     state.ui.resultsList.append(empty);
+
     updateProgress(0, 0);
 }
 
 function createActionButton(label, handler) {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "menu_button";
+    button.className = "menu_button stmr-action-button";
     button.textContent = label;
     button.addEventListener("click", handler);
     return button;
@@ -286,7 +379,11 @@ function appendCandidateCard(candidate, index, total) {
     badgeStyle.className = "stmr-badge secondary";
     badgeStyle.textContent = candidate.style;
 
-    meta.append(badgeIndex, badgeStyle);
+    const badgeLength = document.createElement("span");
+    badgeLength.className = "stmr-badge tertiary";
+    badgeLength.textContent = `${candidate.text.length} 字`;
+
+    meta.append(badgeIndex, badgeStyle, badgeLength);
     header.append(meta);
 
     const body = document.createElement("pre");
@@ -307,12 +404,28 @@ function appendCandidateCard(candidate, index, total) {
     state.ui.resultsList.append(card);
 }
 
+function getPersonaLabel(context) {
+    const candidates = [
+        context?.name1,
+        context?.user_name,
+        context?.userName,
+        context?.username,
+        context?.playerName,
+        context?.personaName,
+    ];
+
+    const name = candidates.find((value) => typeof value === "string" && value.trim());
+    return name ? `「${name.trim()}」` : "我本人";
+}
+
 function buildPrompt({ style, lengthInstruction, extraInstructions, draftText }) {
+    const context = SillyTavern.getContext();
+    const personaLabel = getPersonaLabel(context);
     const rules = [
-        "你是聊天帮答助手，要基于当前完整对话上下文，为用户写一条下一句可直接发送的回复。",
-        "只输出最终回复正文，不要解释，不要标题，不要编号，不要加引号。",
-        "回复必须站在用户这一侧，以用户口吻发送给当前对话对象。",
-        "保持当前世界观、人物关系、语气和上下文连续，不要跳戏，不要总结剧情。",
+        `你现在要代入${personaLabel}的身份，用第一人称“我”直接写一条下一句可以发送出去的回复。`,
+        "不要以旁观者、解释者或助手的口吻写作，不要分析，不要总结，不要标题，不要编号，只输出正文。",
+        "保持当前对话中的关系、情绪、语气、立场和人设连续，像我自己会发出去的话。",
+        "如果上下文能看出我的性格、身份、关系或说话习惯，请延续它，不要切换成局外人口吻。",
         `目标风格：${style}。`,
         `长度要求：${lengthInstruction || DEFAULT_SETTINGS.lengthInstruction}`,
     ];
@@ -322,9 +435,9 @@ function buildPrompt({ style, lengthInstruction, extraInstructions, draftText })
     }
 
     if (draftText) {
-        rules.push(`输入框里已有一份草稿/意图，请保留核心意思并重写得更自然：${draftText}`);
+        rules.push(`下面是我已经写了一半的草稿，请保留我的核心意思，把它润色成自然、像我本人会发出去的版本：\n${draftText}`);
     } else {
-        rules.push("如果当前上下文没有明显可回复点，就给出一条自然、推进对话的简洁回复。");
+        rules.push("如果没有草稿，就结合当前完整上下文，直接给出一条自然、能直接发送的回复。");
     }
 
     return rules.join("\n");
@@ -342,7 +455,7 @@ async function generateOneCandidate({ style, settings, draftText }) {
     const result = await context.generateQuietPrompt({
         quietPrompt,
         responseLength: settings.responseLength,
-        quietName: "Reply Assistant",
+        quietName: "我的候选回复",
         removeReasoning: true,
         trimToSentence: false,
     });
@@ -359,25 +472,24 @@ async function generateCandidates() {
     const context = SillyTavern.getContext();
 
     if (!context.chat?.length) {
-        toastr.warning("当前没有可用聊天上下文。", "多候选帮答");
+        toastr.warning("当前没有可用的聊天上下文。", "多候选回复");
         openPanel();
-        clearResults("先进入一个聊天，再生成候选回复。");
+        clearResults("先进入一段聊天，再来生成候选回复。");
         return;
     }
 
     const styles = buildStyleSequence(settings.replyCount, settings.stylesText);
-    const draftText = settings.useInputDraft ? getDraftText() : "";
+    const draftText = settings.useInputDraft ? getComposerDraftText() : "";
     const token = Date.now();
+
     state.generationToken = token;
     state.stopAfterCurrent = false;
 
     openPanel();
-    clearResults("正在生成中...");
+    clearResults("正在生成候选回复...");
     setGeneratingUi(true);
-    setPanelNote(`准备生成 ${styles.length} 条候选，每条都会单独请求一次模型。`);
+    setPanelNote(`正在生成 ${styles.length} 条候选，每条都会单独请求一次模型。`);
     updateProgress(0, styles.length);
-
-    state.ui.resultsList.replaceChildren();
 
     try {
         for (let index = 0; index < styles.length; index += 1) {
@@ -403,22 +515,22 @@ async function generateCandidates() {
 
             if (state.stopAfterCurrent) {
                 setPanelNote(`已停止排队，保留前 ${index + 1} 条候选。`);
-                toastr.info("已停止后续候选生成。", "多候选帮答");
+                toastr.info("已停止后续候选生成。", "多候选回复");
                 return;
             }
         }
 
         setPanelNote(`已完成 ${styles.length} 条候选生成。`);
-        toastr.success(`已生成 ${styles.length} 条候选回复。`, "多候选帮答");
+        toastr.success(`已生成 ${styles.length} 条候选回复。`, "多候选回复");
     } catch (error) {
         console.error("[SillyTavern-MultiReply-Assistant] generation failed", error);
 
-        if (!state.ui.resultsList.children.length) {
+        if (!state.ui.resultsList?.children.length) {
             clearResults(`生成失败：${error.message}`);
         }
 
         setPanelNote(`生成中断：${error.message}`);
-        toastr.error(error.message || "生成失败，请检查模型连接。", "多候选帮答");
+        toastr.error(error.message || "生成失败，请检查模型连接。", "多候选回复");
     } finally {
         if (state.generationToken === token) {
             setGeneratingUi(false);
@@ -428,17 +540,30 @@ async function generateCandidates() {
 }
 
 function openPanel() {
+    if (!state.ui.overlay) {
+        return;
+    }
+
+    syncComposerFromInput();
     state.ui.overlay.classList.add("is-visible");
     document.body.classList.add("stmr-panel-open");
+
+    window.requestAnimationFrame(() => {
+        state.ui.draftInput?.focus();
+    });
 }
 
 function closePanel() {
+    if (!state.ui.overlay) {
+        return;
+    }
+
     state.ui.overlay.classList.remove("is-visible");
     document.body.classList.remove("stmr-panel-open");
 }
 
 function bindPanel() {
-    const { overlay, panel } = state.ui;
+    const { overlay } = state.ui;
     const form = state.ui.form;
 
     overlay.addEventListener("click", (event) => {
@@ -453,7 +578,17 @@ function bindPanel() {
     });
     state.ui.stopButton.addEventListener("click", () => {
         state.stopAfterCurrent = true;
-        setPanelNote("将在当前这条候选完成后停止。");
+        setPanelNote("会在当前这条候选完成后停止。");
+    });
+
+    state.ui.draftInput.addEventListener("input", () => {
+        updateDraftCount(state.ui.draftInput.value);
+
+        if (state.draftSyncing) {
+            return;
+        }
+
+        syncInputFromComposer();
     });
 
     const syncOnInput = () => {
@@ -484,56 +619,88 @@ function createPanel() {
     overlay.className = "stmr-overlay";
     overlay.innerHTML = `
         <aside id="${PANEL_ID}" class="stmr-panel">
-            <div class="stmr-panel-header">
+            <header class="stmr-panel-header">
                 <div class="stmr-panel-title">
-                    <h3>多候选帮答</h3>
-                    <p>按不同风格帮你起草下一句回复，可直接替换或追加到输入框。</p>
+                    <span class="stmr-panel-eyebrow">Multi Reply Assistant</span>
+                    <h3>多候选回复工作台</h3>
+                    <p>上方直接输入草稿，下方直接挑选多条可发送的回复。</p>
                 </div>
                 <div class="stmr-panel-actions">
-                    <button type="button" class="menu_button" data-stmr-action="generate">开始生成</button>
-                    <button type="button" class="menu_button stmr-stop-hidden" data-stmr-action="stop">停止排队</button>
-                    <button type="button" class="menu_button" data-stmr-action="close">关闭</button>
+                    <button type="button" class="menu_button stmr-header-button" data-stmr-action="generate">开始生成</button>
+                    <button type="button" class="menu_button stmr-header-button stmr-stop-hidden" data-stmr-action="stop">停止</button>
+                    <button type="button" class="menu_button stmr-header-button" data-stmr-action="close">关闭</button>
                 </div>
-            </div>
-            <div class="stmr-panel-config">
-                <div class="stmr-panel-config-grid">
-                    <label>
-                        <span>候选数量</span>
-                        <input id="stmr_panel_reply_count" class="text_pole" type="number" min="1" max="12" step="1" />
-                    </label>
-                    <label>
-                        <span>生成长度上限</span>
-                        <input id="stmr_panel_response_length" class="text_pole" type="number" min="16" max="1000" step="1" />
-                    </label>
-                </div>
-                <label>
-                    <span>文本长度要求</span>
-                    <input id="stmr_panel_length_instruction" class="text_pole" type="text" />
-                </label>
-                <label class="checkbox_label">
-                    <input id="stmr_panel_use_input_draft" type="checkbox" />
-                    <span>把输入框现有内容作为草稿/意图参考</span>
-                </label>
-                <label>
-                    <span>风格列表（每行一个）</span>
-                    <textarea id="stmr_panel_styles_text" class="text_pole textarea_compact" rows="6"></textarea>
-                </label>
-                <label>
-                    <span>额外要求</span>
-                    <textarea id="stmr_panel_extra_instructions" class="text_pole textarea_compact" rows="3"></textarea>
-                </label>
-                <div class="stmr-panel-note" data-stmr-note></div>
-            </div>
-            <div class="stmr-panel-results">
-                <div class="stmr-results-shell">
-                    <div class="stmr-progress-row">
-                        <div class="stmr-progress" aria-hidden="true">
-                            <div class="stmr-progress-bar" data-stmr-progress-bar></div>
+            </header>
+            <div class="stmr-panel-body">
+                <section class="stmr-composer">
+                    <div class="stmr-composer-topline">
+                        <div class="stmr-composer-copy">
+                            <div class="stmr-section-label">输入草稿</div>
+                            <p>把你想说的话直接写在这里，生成时会把它当成你的第一人称草稿。</p>
                         </div>
-                        <div class="stmr-progress-label" data-stmr-progress-label>0/0</div>
+                        <label class="checkbox_label stmr-inline-check">
+                            <input id="stmr_panel_use_input_draft" type="checkbox" />
+                            <span>将草稿参与生成</span>
+                        </label>
+                    </div>
+                    <div class="stmr-composer-surface">
+                        <textarea
+                            id="stmr_panel_draft"
+                            data-stmr-draft-input="true"
+                            class="text_pole textarea_compact stmr-draft-input"
+                            rows="7"
+                            placeholder="在这里写你要发出去的话，或者先写个半成品草稿。"
+                        ></textarea>
+                    </div>
+                    <div class="stmr-composer-meta">
+                        <div class="stmr-draft-count" data-stmr-draft-count>0 字</div>
+                        <div class="stmr-panel-note" data-stmr-note></div>
+                    </div>
+                    <div class="stmr-panel-config">
+                        <div class="stmr-panel-config-grid">
+                            <label>
+                                <span>候选数量</span>
+                                <input id="stmr_panel_reply_count" class="text_pole" type="number" min="1" max="12" step="1" />
+                            </label>
+                            <label>
+                                <span>生成长度上限</span>
+                                <input id="stmr_panel_response_length" class="text_pole" type="number" min="16" max="1000" step="1" />
+                            </label>
+                        </div>
+                        <label>
+                            <span>长度要求</span>
+                            <input id="stmr_panel_length_instruction" class="text_pole" type="text" />
+                        </label>
+                        <details class="stmr-advanced">
+                            <summary>高级提示词</summary>
+                            <div class="stmr-advanced-body">
+                                <label>
+                                    <span>风格列表（每行一个）</span>
+                                    <textarea id="stmr_panel_styles_text" class="text_pole textarea_compact" rows="6"></textarea>
+                                </label>
+                                <label>
+                                    <span>额外要求</span>
+                                    <textarea id="stmr_panel_extra_instructions" class="text_pole textarea_compact" rows="3"></textarea>
+                                </label>
+                            </div>
+                        </details>
+                    </div>
+                </section>
+                <section class="stmr-results-pane">
+                    <div class="stmr-results-header">
+                        <div>
+                            <div class="stmr-section-label">候选回复</div>
+                            <p>每条候选都可以直接替换输入框、追加到输入框，或者复制出来。</p>
+                        </div>
+                        <div class="stmr-progress-row">
+                            <div class="stmr-progress" aria-hidden="true">
+                                <div class="stmr-progress-bar" data-stmr-progress-bar></div>
+                            </div>
+                            <div class="stmr-progress-label" data-stmr-progress-label>0/0</div>
+                        </div>
                     </div>
                     <div class="stmr-results-list" data-stmr-results></div>
-                </div>
+                </section>
             </div>
         </aside>
     `;
@@ -543,6 +710,8 @@ function createPanel() {
     state.ui.overlay = overlay;
     state.ui.panel = overlay.querySelector(`#${PANEL_ID}`);
     state.ui.note = overlay.querySelector("[data-stmr-note]");
+    state.ui.draftInput = overlay.querySelector("[data-stmr-draft-input]") ?? overlay.querySelector("#stmr_panel_draft");
+    state.ui.draftCount = overlay.querySelector("[data-stmr-draft-count]");
     state.ui.resultsList = overlay.querySelector("[data-stmr-results]");
     state.ui.progressBar = overlay.querySelector("[data-stmr-progress-bar]");
     state.ui.progressLabel = overlay.querySelector("[data-stmr-progress-label]");
@@ -560,7 +729,8 @@ function createPanel() {
 
     bindPanel();
     syncPanelInputsFromSettings();
-    setPanelNote("点击“开始生成”后，会按候选数量逐条请求模型。");
+    syncComposerFromInput();
+    setPanelNote("输入草稿后，点击“开始生成”就会逐条得到候选回复。");
     clearResults();
 }
 
