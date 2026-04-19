@@ -609,123 +609,201 @@ function bindPanel() {
     });
 }
 
+function createElement(tagName, className, textContent) {
+    const element = document.createElement(tagName);
+
+    if (className) {
+        element.className = className;
+    }
+
+    if (textContent !== undefined) {
+        element.textContent = textContent;
+    }
+
+    return element;
+}
+
 function createPanel() {
     if (state.ui.overlay) {
         return;
     }
 
-    const overlay = document.createElement("div");
+    const overlay = createElement("div", "stmr-overlay");
     overlay.id = PANEL_OVERLAY_ID;
-    overlay.className = "stmr-overlay";
-    overlay.innerHTML = `
-        <aside id="${PANEL_ID}" class="stmr-panel">
-            <header class="stmr-panel-header">
-                <div class="stmr-panel-title">
-                    <span class="stmr-panel-eyebrow">Multi Reply Assistant</span>
-                    <h3>多候选回复工作台</h3>
-                    <p>上方直接输入草稿，下方直接挑选多条可发送的回复。</p>
-                </div>
-                <div class="stmr-panel-actions">
-                    <button type="button" class="menu_button stmr-header-button" data-stmr-action="generate">开始生成</button>
-                    <button type="button" class="menu_button stmr-header-button stmr-stop-hidden" data-stmr-action="stop">停止</button>
-                    <button type="button" class="menu_button stmr-header-button" data-stmr-action="close">关闭</button>
-                </div>
-            </header>
-            <div class="stmr-panel-body">
-                <section class="stmr-composer">
-                    <div class="stmr-composer-topline">
-                        <div class="stmr-composer-copy">
-                            <div class="stmr-section-label">输入草稿</div>
-                            <p>把你想说的话直接写在这里，生成时会把它当成你的第一人称草稿。</p>
-                        </div>
-                        <label class="checkbox_label stmr-inline-check">
-                            <input id="stmr_panel_use_input_draft" type="checkbox" />
-                            <span>将草稿参与生成</span>
-                        </label>
-                    </div>
-                    <div class="stmr-composer-surface">
-                        <textarea
-                            id="stmr_panel_draft"
-                            data-stmr-draft-input="true"
-                            class="text_pole textarea_compact stmr-draft-input"
-                            rows="7"
-                            placeholder="在这里写你要发出去的话，或者先写个半成品草稿。"
-                        ></textarea>
-                    </div>
-                    <div class="stmr-composer-meta">
-                        <div class="stmr-draft-count" data-stmr-draft-count>0 字</div>
-                        <div class="stmr-panel-note" data-stmr-note></div>
-                    </div>
-                    <div class="stmr-panel-config">
-                        <div class="stmr-panel-config-grid">
-                            <label>
-                                <span>候选数量</span>
-                                <input id="stmr_panel_reply_count" class="text_pole" type="number" min="1" max="12" step="1" />
-                            </label>
-                            <label>
-                                <span>生成长度上限</span>
-                                <input id="stmr_panel_response_length" class="text_pole" type="number" min="16" max="1000" step="1" />
-                            </label>
-                        </div>
-                        <label>
-                            <span>长度要求</span>
-                            <input id="stmr_panel_length_instruction" class="text_pole" type="text" />
-                        </label>
-                        <details class="stmr-advanced">
-                            <summary>高级提示词</summary>
-                            <div class="stmr-advanced-body">
-                                <label>
-                                    <span>风格列表（每行一个）</span>
-                                    <textarea id="stmr_panel_styles_text" class="text_pole textarea_compact" rows="6"></textarea>
-                                </label>
-                                <label>
-                                    <span>额外要求</span>
-                                    <textarea id="stmr_panel_extra_instructions" class="text_pole textarea_compact" rows="3"></textarea>
-                                </label>
-                            </div>
-                        </details>
-                    </div>
-                </section>
-                <section class="stmr-results-pane">
-                    <div class="stmr-results-header">
-                        <div>
-                            <div class="stmr-section-label">候选回复</div>
-                            <p>每条候选都可以直接替换输入框、追加到输入框，或者复制出来。</p>
-                        </div>
-                        <div class="stmr-progress-row">
-                            <div class="stmr-progress" aria-hidden="true">
-                                <div class="stmr-progress-bar" data-stmr-progress-bar></div>
-                            </div>
-                            <div class="stmr-progress-label" data-stmr-progress-label>0/0</div>
-                        </div>
-                    </div>
-                    <div class="stmr-results-list" data-stmr-results></div>
-                </section>
-            </div>
-        </aside>
-    `;
+
+    const panel = createElement("aside", "stmr-panel");
+    panel.id = PANEL_ID;
+
+    const header = createElement("header", "stmr-panel-header");
+    const titleWrap = createElement("div", "stmr-panel-title");
+    titleWrap.append(
+        createElement("span", "stmr-panel-eyebrow", "Multi Reply Assistant"),
+        createElement("h3", "", "多候选回复工作台"),
+        createElement("p", "", "上方直接输入草稿，下方直接挑选多条可发送的回复。"),
+    );
+
+    const headerActions = createElement("div", "stmr-panel-actions");
+    const generateButton = createElement("button", "menu_button stmr-header-button", "开始生成");
+    generateButton.type = "button";
+    generateButton.dataset.stmrAction = "generate";
+
+    const stopButton = createElement("button", "menu_button stmr-header-button stmr-stop-hidden", "停止");
+    stopButton.type = "button";
+    stopButton.dataset.stmrAction = "stop";
+
+    const closeButton = createElement("button", "menu_button stmr-header-button", "关闭");
+    closeButton.type = "button";
+    closeButton.dataset.stmrAction = "close";
+
+    headerActions.append(generateButton, stopButton, closeButton);
+    header.append(titleWrap, headerActions);
+
+    const body = createElement("div", "stmr-panel-body");
+
+    const composer = createElement("section", "stmr-composer");
+    const composerTopline = createElement("div", "stmr-composer-topline");
+    const composerCopy = createElement("div", "stmr-composer-copy");
+    composerCopy.append(
+        createElement("div", "stmr-section-label", "输入草稿"),
+        createElement("p", "", "把你想说的话直接写在这里，生成时会把它当成你的第一人称草稿。"),
+    );
+
+    const useDraftLabel = createElement("label", "checkbox_label stmr-inline-check");
+    const useDraftInput = createElement("input");
+    useDraftInput.id = "stmr_panel_use_input_draft";
+    useDraftInput.type = "checkbox";
+    const useDraftText = createElement("span", "", "将草稿参与生成");
+    useDraftLabel.append(useDraftInput, useDraftText);
+    composerTopline.append(composerCopy, useDraftLabel);
+
+    const composerSurface = createElement("div", "stmr-composer-surface");
+    const draftInput = createElement("textarea", "text_pole textarea_compact stmr-draft-input");
+    draftInput.id = "stmr_panel_draft";
+    draftInput.dataset.stmrDraftInput = "true";
+    draftInput.rows = 7;
+    draftInput.placeholder = "在这里写你要发出去的话，或者先写个半成品草稿。";
+    composerSurface.append(draftInput);
+
+    const composerMeta = createElement("div", "stmr-composer-meta");
+    const draftCount = createElement("div", "stmr-draft-count", "0 字");
+    draftCount.dataset.stmrDraftCount = "true";
+    const note = createElement("div", "stmr-panel-note");
+    note.dataset.stmrNote = "true";
+    composerMeta.append(draftCount, note);
+
+    const panelConfig = createElement("div", "stmr-panel-config");
+    const configGrid = createElement("div", "stmr-panel-config-grid");
+
+    const replyCountLabel = createElement("label");
+    replyCountLabel.append(
+        createElement("span", "", "候选数量"),
+        Object.assign(createElement("input", "text_pole"), {
+            id: "stmr_panel_reply_count",
+            type: "number",
+            min: "1",
+            max: "12",
+            step: "1",
+        }),
+    );
+
+    const responseLengthLabel = createElement("label");
+    responseLengthLabel.append(
+        createElement("span", "", "生成长度上限"),
+        Object.assign(createElement("input", "text_pole"), {
+            id: "stmr_panel_response_length",
+            type: "number",
+            min: "16",
+            max: "1000",
+            step: "1",
+        }),
+    );
+
+    configGrid.append(replyCountLabel, responseLengthLabel);
+
+    const lengthInstructionLabel = createElement("label");
+    lengthInstructionLabel.append(
+        createElement("span", "", "长度要求"),
+        Object.assign(createElement("input", "text_pole"), {
+            id: "stmr_panel_length_instruction",
+            type: "text",
+        }),
+    );
+
+    const advanced = createElement("details", "stmr-advanced");
+    const advancedSummary = createElement("summary", "", "高级提示词");
+    const advancedBody = createElement("div", "stmr-advanced-body");
+
+    const stylesLabel = createElement("label");
+    const stylesTextarea = createElement("textarea", "text_pole textarea_compact");
+    stylesTextarea.id = "stmr_panel_styles_text";
+    stylesTextarea.rows = 6;
+    stylesLabel.append(createElement("span", "", "风格列表（每行一个）"), stylesTextarea);
+
+    const extraInstructionsLabel = createElement("label");
+    const extraInstructionsTextarea = createElement("textarea", "text_pole textarea_compact");
+    extraInstructionsTextarea.id = "stmr_panel_extra_instructions";
+    extraInstructionsTextarea.rows = 3;
+    extraInstructionsLabel.append(createElement("span", "", "额外要求"), extraInstructionsTextarea);
+
+    advancedBody.append(stylesLabel, extraInstructionsLabel);
+    advanced.append(advancedSummary, advancedBody);
+    panelConfig.append(configGrid, lengthInstructionLabel, advanced);
+
+    composer.append(composerTopline, composerSurface, composerMeta, panelConfig);
+
+    const resultsPane = createElement("section", "stmr-results-pane");
+    const resultsHeader = createElement("div", "stmr-results-header");
+    const resultsCopy = createElement("div");
+    resultsCopy.append(
+        createElement("div", "stmr-section-label", "候选回复"),
+        createElement("p", "", "每条候选都可以直接替换输入框、追加到输入框，或者复制出来。"),
+    );
+
+    const progressRow = createElement("div", "stmr-progress-row");
+    const progress = createElement("div", "stmr-progress");
+    progress.setAttribute("aria-hidden", "true");
+    const progressBar = createElement("div", "stmr-progress-bar");
+    progressBar.dataset.stmrProgressBar = "true";
+    progress.append(progressBar);
+    const progressLabel = createElement("div", "stmr-progress-label", "0/0");
+    progressLabel.dataset.stmrProgressLabel = "true";
+    progressRow.append(progress, progressLabel);
+
+    resultsHeader.append(resultsCopy, progressRow);
+
+    const resultsList = createElement("div", "stmr-results-list");
+    resultsList.dataset.stmrResults = "true";
+    resultsPane.append(resultsHeader, resultsList);
+
+    body.append(composer, resultsPane);
+    panel.append(header, body);
+    overlay.append(panel);
 
     document.body.append(overlay);
 
     state.ui.overlay = overlay;
-    state.ui.panel = overlay.querySelector(`#${PANEL_ID}`);
-    state.ui.note = overlay.querySelector("[data-stmr-note]");
-    state.ui.draftInput = overlay.querySelector("[data-stmr-draft-input]") ?? overlay.querySelector("#stmr_panel_draft");
-    state.ui.draftCount = overlay.querySelector("[data-stmr-draft-count]");
-    state.ui.resultsList = overlay.querySelector("[data-stmr-results]");
-    state.ui.progressBar = overlay.querySelector("[data-stmr-progress-bar]");
-    state.ui.progressLabel = overlay.querySelector("[data-stmr-progress-label]");
-    state.ui.generateButton = overlay.querySelector('[data-stmr-action="generate"]');
-    state.ui.stopButton = overlay.querySelector('[data-stmr-action="stop"]');
-    state.ui.closeButton = overlay.querySelector('[data-stmr-action="close"]');
+    state.ui.panel = panel;
+    state.ui.note = note;
+    state.ui.draftInput = draftInput;
+    state.ui.draftCount = draftCount;
+    state.ui.resultsList = resultsList;
+    state.ui.progressBar = progressBar;
+    state.ui.progressLabel = progressLabel;
+    state.ui.generateButton = generateButton;
+    state.ui.stopButton = stopButton;
+    state.ui.closeButton = closeButton;
     state.ui.form = {
-        replyCount: overlay.querySelector("#stmr_panel_reply_count"),
-        responseLength: overlay.querySelector("#stmr_panel_response_length"),
-        lengthInstruction: overlay.querySelector("#stmr_panel_length_instruction"),
-        stylesText: overlay.querySelector("#stmr_panel_styles_text"),
-        extraInstructions: overlay.querySelector("#stmr_panel_extra_instructions"),
-        useInputDraft: overlay.querySelector("#stmr_panel_use_input_draft"),
+        replyCount: replyCountLabel.querySelector("input"),
+        responseLength: responseLengthLabel.querySelector("input"),
+        lengthInstruction: lengthInstructionLabel.querySelector("input"),
+        stylesText: stylesTextarea,
+        extraInstructions: extraInstructionsTextarea,
+        useInputDraft: useDraftInput,
     };
+
+    if (!state.ui.resultsList || !state.ui.generateButton || !state.ui.draftInput) {
+        throw new Error("STMR panel initialization failed.");
+    }
 
     bindPanel();
     syncPanelInputsFromSettings();
